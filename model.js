@@ -146,7 +146,7 @@
       served: new Set(), monthly: [], _mUsed: 0, _mWeeks: 0, voucher: 0,
     };
 
-    const fUsed = new Float64Array(N), fStarted = new Int32Array(N), fAband = new Int32Array(N);
+    const fUsed = new Float64Array(N), fStarted = new Int32Array(N), fAband = new Int32Array(N), fCharge = new Float64Array(N);
     const counts = new Int32Array(N);
     const recount = () => {
       counts.fill(0);
@@ -305,6 +305,7 @@
         const c = tau * price[b] * (locked(b) ? 1 + P.lockSurcharge : 1);
         charge += c;
         if (firms[holder[b]].sme) smeCharge += c;
+        if (w >= P.warmupWeeks) fCharge[holder[b]] += c * (period / WEEKS_PER_MONTH);
       }
       if (w >= P.warmupWeeks) {
         m.revenue += charge * (period / WEEKS_PER_MONTH);
@@ -439,6 +440,7 @@
     const sme = byV.filter((i) => firms[i].sme);
     const smeSt = sum(sme, fStarted), smeAb = sum(sme, fAband);
     return {
+      highValueChargeShare: (() => { const t = sum(byV, fCharge); return t ? (100 * (t - sum(low, fCharge))) / t : 0; })(),
       smeShare: (100 * sum(sme, fUsed)) / totUsed,
       smeAbandon: smeSt + smeAb ? (100 * smeAb) / (smeSt + smeAb) : 0,
       voucherM: m.voucher * yr,
@@ -462,7 +464,7 @@
 
   const METRICS = ["utilization", "idleHeld", "unallocated", "valueM", "revenueM",
     "meanWait", "medianWait", "abandonRate", "firmsServed", "transfersPerMonth",
-    "lowValueShare", "lowValueAbandon", "top10Share", "costPctValue", "smeShare", "smeAbandon", "voucherM"];
+    "lowValueShare", "lowValueAbandon", "top10Share", "costPctValue", "smeShare", "smeAbandon", "voucherM", "highValueChargeShare"];
 
   function summarize(runs) {
     const out = {};

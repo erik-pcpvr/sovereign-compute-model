@@ -109,6 +109,8 @@
       <div id="ctl-committee"></div>
       <h3>Lease</h3>
       <div id="ctl-lease"></div>
+      <h3>Program design options</h3>
+      <div id="ctl-design"></div>
       <h3>Run</h3>
       <div id="ctl-run"></div>
       <div class="btns"><button class="b" type="button" id="reset">Reset defaults</button></div>
@@ -171,13 +173,15 @@
       <li>Self-assessed licences do best on <strong>waiting time, abandoned runs and value delivered</strong>, because capacity moves to whichever firm values it most at each billing boundary, with no review round.</li>
       <li><strong>Licences do not crowd out smaller players.</strong> Lower-value firms get a larger share of the capacity used and abandon fewer runs than under a best-practice committee or a market-priced lease, and capacity is less concentrated among the top firms. Buyers take idle or cheaply declared blocks first, which are mostly held by firms between runs, so capacity circulates instead of staying with whoever got it first.</li>
       <li><strong>The charge is small relative to the value of compute.</strong> At 2.5% a month, users pay a few per cent of the value of the compute they use. A lower rate allocates capacity about as well and raises less.</li>
+      <li><strong>Protecting running jobs helps.</strong> Letting a job keep its blocks while it runs (up to 12 weeks), so only idle capacity is open to bids, avoids costly mid-run migrations. With weekly clearing and a 1.25% monthly charge this gives the best results here, and it protects lower-value firms even when migration is slow.</li>
+      <li><strong>Cash-constrained SMEs still get access.</strong> Buyouts are mostly of cheaply declared idle blocks, so a cash limit barely affects SMEs under the licence. It hurts them badly under a market-priced lease. Vouchers and reserved blocks add little under the licence.</li>
       <li><strong>The billing period matters more than the charge rate.</strong> Weekly clearing beats monthly. Long migration windows erode the advantage.</li>
     </ul>
     <h2>Limitations, read before citing</h2>
     <ul>
       <li><strong>Firms do not behave strategically.</strong> Declarations follow a fixed rule. The model does not capture overstatement to block rivals, collusion, or gaming of the buyout process. In theory the charge rate disciplines exactly this, so it barely affects allocation here. Here it mainly sets revenue.</li>
       <li><strong>No budget constraints.</strong> A firm's willingness to pay equals the value it would create. A cash-poor start-up with a valuable project could be outbid in reality; a pilot may need a credit or voucher for eligible SMEs.</li>
-      <li><strong>No shared scheduler or backfill.</strong> Real shared HPC systems let other jobs use idle allocations, which would narrow the gap between rules. The model represents dedicated blocks.</li>
+      <li><strong>Backfill is simplified.</strong> The backfill option fills a share of idle allocated capacity with lower-value preemptible work under every rule. It narrows the utilization gap between rules but not the gap in waiting times. It is off by default.</li>
       <li><strong>The status-quo rules are stylised.</strong> ISED has not published an allocation mechanism for industry access to SCIP. The committee and lease rules are plausible alternatives, not descriptions of a real program.</li>
       <li><strong>Values are assumptions.</strong> "Value delivered" uses an assumed average value per MW-month of facility power (default C$1.7M, roughly the 2026 one-year rental price of ~570 H100-class GPUs). Changing it scales value and revenue but not utilization or waits. Revenue figures are not comparable across rules: lease revenue is a usage fee, licence revenue is a charge on top of any usage fee.</li>
       <li>There are no prices for electricity or operations, no demand growth, no firm entry or exit, and no learning. One sandbox pool is modelled in isolation.</li>
@@ -188,7 +192,7 @@
 </main>
 <footer class="sub" style="max-width:1180px;margin:24px auto 32px;padding:0 16px;font-size:.85rem">Built by <a href="https://www.linkedin.com/in/erik-peterson-9776671/">Erik Peterson</a>, Toronto, in a personal capacity. Open source: <a href="https://github.com/erik-pcpvr/sovereign-compute-model">model code and tests</a>. Prepared for a brief to the House of Commons Standing Committees on Science and Research and on Industry and Technology.</footer>
 
-<script src="model.js?v=2026-11-08"></script>
+<script src="model.js?v=2026-11-08b"></script>
 <script>
 (function () {
   const M = window.ComputeModel;
@@ -223,6 +227,11 @@
     ['committee', 'committeeNoise', 'Review scoring error', 0, 1.5, 0.1, (v) => v.toFixed(1)],
     ['lease', 'leaseTermMonths', 'Lease term', 1, 24, 1, (v) => v + ' mo'],
     ['lease', 'leasePriceFraction', 'Lease price', 0.05, 1.2, 0.05, (v) => Math.round(v * 100) + '% of value'],
+    ['design', 'runLockWeeks', 'Protect running jobs (licence)', 0, 16, 1, (v) => (v ? 'up to ' + v + ' wk' : 'off'), 'A job that is running can’t be bought out for this long. Its holder pays double the charge on protected blocks. The recommended-design row uses 12 weeks.'],
+    ['design', 'smeCashLimit', 'SME cash limit', 0.2, 1, 0.05, (v) => (v >= 1 ? 'none' : Math.round(v * 100) + '% of value'), 'Half of firms are SMEs. They can pay at most this share of a run’s value up front.'],
+    ['design', 'voucherShare', 'Access Fund voucher', 0, 0.8, 0.05, (v) => Math.round(v * 100) + '%', 'Share of SMEs’ lease, buyout and licence costs paid by the Compute Access Fund.'],
+    ['design', 'reserveShare', 'Reserved for SMEs', 0, 0.5, 0.05, (v) => Math.round(v * 100) + '%', 'Share of blocks only SMEs may hold, under every rule.'],
+    ['design', 'backfillShare', 'Scheduler backfill', 0, 1, 0.05, (v) => Math.round(v * 100) + '%', 'Share of allocated-but-idle capacity used by preemptible jobs (worth half a normal run), under every rule.'],
     ['run', 'seeds', 'Random seeds', 4, 60, 2, (v) => v],
   ];
   const D = M.DEFAULTS;
@@ -255,6 +264,8 @@
     ['Lower-value firms’ runs abandoned', 'lowValueAbandon', (x) => x.toFixed(0) + '%'],
     ['Top 10% of firms’ share of capacity used', 'top10Share', (x) => x.toFixed(0) + '%'],
     ['Paid by users, % of value used', 'costPctValue', (x) => x.toFixed(1) + '%'],
+    ['SMEs’ runs abandoned', 'smeAbandon', (x) => x.toFixed(0) + '%'],
+    ['Voucher cost to Fund', 'voucherM', (x) => '$' + x.toFixed(0) + 'M'],
   ];
   const COLS = [
     ['Utilization', 'utilization', (x) => x.toFixed(0) + '%'],
@@ -304,7 +315,7 @@
   const q = (s) => '"' + String(s).replace(/"/g, '""') + '"';
   $('csvScenarios').addEventListener('click', () => {
     if (!last) return;
-    const keys = ['utilization', 'idleHeld', 'unallocated', 'valueM', 'revenueM', 'meanWait', 'medianWait', 'abandonRate', 'firmsServed', 'transfersPerMonth', 'lowValueShare', 'lowValueAbandon', 'top10Share', 'costPctValue'];
+    const keys = ['utilization', 'idleHeld', 'unallocated', 'valueM', 'revenueM', 'meanWait', 'medianWait', 'abandonRate', 'firmsServed', 'transfersPerMonth', 'lowValueShare', 'lowValueAbandon', 'top10Share', 'costPctValue', 'smeShare', 'smeAbandon', 'voucherM'];
     let csv = 'Scenario,' + keys.flatMap((k) => [k + '_mean', k + '_p10', k + '_p90']).join(',') + '\n';
     for (const s of last.scenarios) csv += q(s.label) + ',' + keys.flatMap((k) => [s.result[k].mean, s.result[k].p10, s.result[k].p90].map((x) => x.toFixed(2))).join(',') + '\n';
     csv += '\nParameters\n' + Object.entries(last.params).map(([k, v]) => k + ',' + v).join('\n') + '\n';

@@ -68,6 +68,28 @@ check("goal metrics are shares within [0,100] and committee charges nothing", ()
   assert.ok(R.harberger.lowValueShare.mean < 50, "lower-value half should use less than half");
 });
 
+check("a voucher exactly offsetting the SME cash limit restores the unconstrained result", () => {
+  const free = M.run({ seeds: 6 }).results.harberger.utilization.mean;
+  const fixed = M.run({ seeds: 6, smeCashLimit: 0.5, voucherShare: 0.5 }).results.harberger.utilization.mean;
+  assert.ok(Math.abs(free - fixed) < 1e-9, `${free} vs ${fixed}`);
+});
+
+check("reserving every block for SMEs gives SMEs all the capacity used", () => {
+  const r = M.run({ seeds: 4, reserveShare: 1 }).results;
+  for (const rule of M.RULES) assert.ok(r[rule].smeShare.mean > 99.9, `${rule} ${r[rule].smeShare.mean}`);
+});
+
+check("backfill raises utilization under every rule", () => {
+  const a = M.run({ seeds: 4 }).results, b = M.run({ seeds: 4, backfillShare: 0.5 }).results;
+  for (const rule of M.RULES) assert.ok(b[rule].utilization.mean > a[rule].utilization.mean, rule);
+});
+
+check("protecting running jobs cuts abandonment when migration is slow", () => {
+  const off = M.run({ seeds: 8, billingWeeks: 1, migrationDays: 14 }).results.harberger.abandonRate.mean;
+  const on = M.run({ seeds: 8, billingWeeks: 1, migrationDays: 14, runLockWeeks: 12 }).results.harberger.abandonRate.mean;
+  assert.ok(on < off, `${off} -> ${on}`);
+});
+
 check("quadratic match: one big donor gets no CLR match; many small donors do", () => {
   const out = M.quadraticMatch([
     { contributions: [1_000_000] },
@@ -91,7 +113,7 @@ if (process.argv.includes("--report") || failures === 0) {
   const pad = (x, n) => String(x).padEnd(n);
   console.log(pad("Scenario", 64) + rows.map((r) => pad(r[0], 13)).join(""));
   for (const sc of M.runScenarios({})) {
-    console.log(pad(sc.label, 64) + rows.map(([, k, d]) =>
+    console.log(pad(sc.label.slice(0, 62), 64) + rows.map(([, k, d]) =>
       pad(`${fmt(sc.result[k].mean, d)}`, 13)).join(""));
   }
   console.log("(means over " + P.seeds + " seeds; p10–p90 ranges available in the UI and CSV)");

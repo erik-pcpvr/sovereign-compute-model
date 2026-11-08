@@ -55,6 +55,15 @@
     // Harberger
     taxRatePerMonth: 0.025,   // charge on declared value, per month
     billingWeeks: 4,          // how often declarations reset and buyouts clear
+    // Program design options (all off by default)
+    smeShare: 0.5,            // share of firms that are SMEs (random, independent of value)
+    smeCashLimit: 1,          // SMEs can pay at most this share of a run's value up front (1 = no constraint)
+    voucherShare: 0,          // share of SMEs' lease, buyout and licence costs paid by the Compute Access Fund
+    reserveShare: 0,          // share of blocks only SMEs may hold
+    runLockWeeks: 0,          // licence: blocks of a running job can't be bought for this long (0 = off)
+    lockSurcharge: 1,         // licence: extra charge on locked blocks, as a multiple of the base charge
+    backfillShare: 0,         // share of allocated-but-idle capacity used by preemptible backfill jobs
+    backfillValue: 0.5,       // value of backfill work relative to an average firm's run
     // Run
     weeks: 52, warmupWeeks: 26, seeds: 20, seed: 1,
   };
@@ -112,6 +121,14 @@
     for (let i = 0; i < N; i++) {
       firms.push({ v: demand.lognMean1(P.valueSigma), burst: null, lastMw: 0, recent: false, lastActive: 0 });
     }
+    const smeRng = makeRng(seed ^ 0x51ed2701); // same SME flags under every rule
+    for (const f of firms) f.sme = smeRng.u() < P.smeShare;
+    const Rsv = Math.round(Math.max(0, Math.min(1, P.reserveShare)) * C); // blocks [0, Rsv) are SME-only
+    const vs = Math.max(0, Math.min(1, P.voucherShare));
+    // Can firm i afford a cost, given the value it would get? SMEs face a cash limit, eased by vouchers.
+    const affordable = (i, cost, value) => firms[i].sme
+      ? (1 - vs) * cost < Math.min(1, P.smeCashLimit) * value
+      : cost < value;
     const holder = new Int32Array(C).fill(-1);
     const price = new Float64Array(C);
     const assignedWeek = new Int32Array(C).fill(-1e9);
@@ -126,7 +143,7 @@
     const m = {
       usedBW: 0, idleHeldBW: 0, freeBW: 0, value: 0, revenue: 0,
       waits: [], started: 0, abandoned: 0, bursts: 0, transfers: 0,
-      served: new Set(), monthly: [], _mUsed: 0, _mWeeks: 0,
+      served: new Set(), monthly: [], _mUsed: 0, _mWeeks: 0, voucher: 0,
     };
 
     const fUsed = new Float64Array(N), fStarted = new Int32Array(N), fAband = new Int32Array(N);
@@ -167,13 +184,17 @@
       const wait = waitingFirms().sort((a, b) => firms[a].burst.waitSince - firms[b].burst.waitSince);
       for (const i of wait) {
         const need = firms[i].burst.mw - counts[i];
-        if (need > free.length) continue;
+        const pool = firms[i].sme ? free : free.filter((b) => b >= Rsv);
+        if (need > pool.length) continue;
         if (accept && !accept(i)) continue;
-        for (let k = 0; k < need; k++) {
-          const b = free.pop();
+        // SMEs use reserved blocks first; everyone else takes from the top.
+        const take = firms[i].sme && Rsv > 0 ? pool.slice(0, need) : pool.slice(pool.length - need).reverse();
+        const tk = new Set(take);
+        for (const b of take) {
           assign(b, i, w);
           if (onAssign) onAssign(b);
         }
+        for (let k = free.length - 1; k >= 0; k--) if (tk.has(free[k])) free.splice(k, 1);
         counts[i] += need;
       }
     };
@@ -202,8 +223,12 @@
           remaining -= a.req;
           let left = a.req;
           // Keep blocks the firm already had (no migration), then fill.
-          for (let b = 0; b < C && left; b++) if (prev[b] === a.i && holder[b] < 0) { holder[b] = a.i; left--; }
-          for (let b = 0; b < C && left; b++) if (holder[b] < 0 && prev[b] !== a.i) { assign(b, a.i, w); left--; }
+          const ok = (b) => firms[a.i].sme || b >= Rsv;
+          let avail = 0;
+          for (let b = 0; b < C; b++) if (holder[b] < 0 && ok(b)) avail++;
+          if (avail < a.req) { remaining += a.req; continue; }
+          for (let b = 0; b < C && left; b++) if (prev[b] === a.i && holder[b] < 0 && ok(b)) { holder[b] = a.i; left--; }
+          for (let b = 0; b < C && left; b++) if (holder[b] < 0 && prev[b] !== a.i && ok(b)) { assign(b, a.i, w); left--; }
         }
         for (let b = 0; b < C; b++) if (holder[b] >= 0 && holder[b] !== prev[b]) assignedWeek[b] = w;
       } else if (P.committeeReclaimWeeks > 0) {
@@ -234,12 +259,16 @@
         const f = firms[i];
         const runValue = f.burst.v * valWk * f.burst.left;
         const restMonths = Math.max(0, (termWeeks - f.burst.left) / WEEKS_PER_MONTH);
-        return runValue + restMonths * optionValue(f) >= D.leasePrice * P.leaseTermMonths;
+        const cost = D.leasePrice * P.leaseTermMonths, value = runValue + restMonths * optionValue(f);
+        return f.sme ? (1 - vs) * cost <= Math.min(1, P.smeCashLimit) * value : cost <= value;
       };
       fcfsFree(w, (b) => { expiry[b] = w + termWeeks; }, worthIt);
-      let leased = 0;
-      for (let b = 0; b < C; b++) if (holder[b] >= 0) leased++;
-      if (w >= P.warmupWeeks) m.revenue += (leased * D.leasePrice) / WEEKS_PER_MONTH;
+      let leased = 0, smeLeased = 0;
+      for (let b = 0; b < C; b++) if (holder[b] >= 0) { leased++; if (firms[holder[b]].sme) smeLeased++; }
+      if (w >= P.warmupWeeks) {
+        m.revenue += (leased * D.leasePrice) / WEEKS_PER_MONTH;
+        m.voucher += (vs * smeLeased * D.leasePrice) / WEEKS_PER_MONTH;
+      }
     }
 
     function stepHarberger(w) {
@@ -263,9 +292,24 @@
         seen[i]++;
         price[b] = h * (1 - shade);
       }
-      let declared = 0;
-      for (let b = 0; b < C; b++) declared += price[b];
-      if (w >= P.warmupWeeks) m.revenue += tau * declared * (period / WEEKS_PER_MONTH);
+      // Run protection: blocks of a job that started less than runLockWeeks ago can't be bought.
+      const locked = (b) => {
+        const s = holder[b];
+        if (s < 0 || P.runLockWeeks <= 0) return false;
+        const fb = firms[s].burst;
+        return !!fb && fb.started >= 0 && w - fb.started < P.runLockWeeks;
+      };
+      let charge = 0, smeCharge = 0;
+      for (let b = 0; b < C; b++) {
+        if (holder[b] < 0) continue;
+        const c = tau * price[b] * (locked(b) ? 1 + P.lockSurcharge : 1);
+        charge += c;
+        if (firms[holder[b]].sme) smeCharge += c;
+      }
+      if (w >= P.warmupWeeks) {
+        m.revenue += charge * (period / WEEKS_PER_MONTH);
+        m.voucher += vs * smeCharge * (period / WEEKS_PER_MONTH);
+      }
 
       // Buyouts: waiting firms, highest value first, buy the cheapest blocks.
       let moved = 0;
@@ -275,14 +319,15 @@
         const need = f.burst.mw - counts[i];
         if (need <= 0) continue;
         const cand = [];
-        for (let b = 0; b < C; b++) if (holder[b] !== i) cand.push(b);
+        for (let b = 0; b < C; b++) if (holder[b] !== i && (f.sme || b >= Rsv) && !locked(b)) cand.push(b);
         if (cand.length < need) continue;
         cand.sort((a, b) => price[a] - price[b]);
         const take = cand.slice(0, need);
         const cost = take.reduce((s, b) => s + price[b], 0);
         // Buyer's value: completing its run, net of migration downtime.
         const perBlock = f.burst.v * valWk * (f.burst.left - migLoss);
-        if (perBlock * need <= cost) continue;
+        if (!affordable(i, cost, perBlock * need)) continue;
+        if (w >= P.warmupWeeks && f.sme) m.voucher += vs * cost;
         for (const b of take) {
           const s = holder[b];
           if (s >= 0) {
@@ -365,10 +410,13 @@
       if (measuring) {
         let held = 0;
         for (let k = 0; k < C; k++) if (holder[k] >= 0) held++;
-        m.usedBW += used;
-        m.idleHeldBW += held - used;
+        // Backfill: preemptible jobs use part of the allocated-but-idle capacity.
+        const bf = Math.max(0, Math.min(1, P.backfillShare)) * Math.max(0, held - used);
+        m.value += bf * valWk * P.backfillValue;
+        m.usedBW += used + bf;
+        m.idleHeldBW += held - used - bf;
         m.freeBW += C - held;
-        m._mUsed += used;
+        m._mUsed += used + bf;
         if (++m._mWeeks === WEEKS_PER_MONTH) {
           m.monthly.push((100 * m._mUsed) / (C * WEEKS_PER_MONTH));
           m._mUsed = 0; m._mWeeks = 0;
@@ -388,7 +436,12 @@
     const lowSt = sum(low, fStarted), lowAb = sum(low, fAband);
     const byUse = byV.slice().sort((a, b) => fUsed[b] - fUsed[a]);
     const usedMonths = m.usedBW / WEEKS_PER_MONTH;
+    const sme = byV.filter((i) => firms[i].sme);
+    const smeSt = sum(sme, fStarted), smeAb = sum(sme, fAband);
     return {
+      smeShare: (100 * sum(sme, fUsed)) / totUsed,
+      smeAbandon: smeSt + smeAb ? (100 * smeAb) / (smeSt + smeAb) : 0,
+      voucherM: m.voucher * yr,
       lowValueShare: (100 * sum(low, fUsed)) / totUsed,
       lowValueAbandon: lowSt + lowAb ? (100 * lowAb) / (lowSt + lowAb) : 0,
       top10Share: (100 * sum(byUse.slice(0, Math.max(1, Math.round(N / 10))), fUsed)) / totUsed,
@@ -409,7 +462,7 @@
 
   const METRICS = ["utilization", "idleHeld", "unallocated", "valueM", "revenueM",
     "meanWait", "medianWait", "abandonRate", "firmsServed", "transfersPerMonth",
-    "lowValueShare", "lowValueAbandon", "top10Share", "costPctValue"];
+    "lowValueShare", "lowValueAbandon", "top10Share", "costPctValue", "smeShare", "smeAbandon", "voucherM"];
 
   function summarize(runs) {
     const out = {};
@@ -460,6 +513,8 @@
       params: { leaseTermMonths: 1, leasePriceFraction: 0.6 } },
     { id: "licMonthly", label: "Self-assessed licence, monthly billing", rule: "harberger", params: {} },
     { id: "licWeekly", label: "Self-assessed licence, weekly billing", rule: "harberger", params: { billingWeeks: 1 } },
+    { id: "licDesign", label: "Self-assessed licence, recommended design (weekly; running jobs protected up to 12 wk; 1.25%/mo)", rule: "harberger",
+      params: { billingWeeks: 1, runLockWeeks: 12, taxRatePerMonth: 0.0125 } },
   ];
 
   function runScenarios(params) {

@@ -53,7 +53,7 @@
     leaseTermMonths: 6,
     leasePriceFraction: 0.3,  // lease price as a share of valuePerMwMonth
     // Harberger
-    taxRatePerMonth: 0.025,   // charge on declared value, per month
+    taxRatePerMonth: 0.0125,  // charge on declared value, per month (the recommended starting rate)
     billingWeeks: 4,          // how often declarations reset and buyouts clear
     // Program design options (all off by default)
     smeShare: 0.5,            // share of firms that are SMEs (random, independent of value)
@@ -515,8 +515,8 @@
       params: { leaseTermMonths: 1, leasePriceFraction: 0.6 } },
     { id: "licMonthly", label: "Self-assessed licence, monthly billing", rule: "harberger", params: {} },
     { id: "licWeekly", label: "Self-assessed licence, weekly billing", rule: "harberger", params: { billingWeeks: 1 } },
-    { id: "licDesign", label: "Self-assessed licence, recommended design (weekly; running jobs protected up to 12 wk; 1.25%/mo)", rule: "harberger",
-      params: { billingWeeks: 1, runLockWeeks: 12, taxRatePerMonth: 0.0125 } },
+    { id: "licDesign", label: "Self-assessed licence, recommended design (weekly; running jobs protected up to 12 wk; charge as set)", rule: "harberger",
+      params: { billingWeeks: 1, runLockWeeks: 12 } },
   ];
 
   function runScenarios(params) {

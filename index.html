@@ -177,6 +177,17 @@
       <li><strong>Cash-constrained SMEs still get access.</strong> Buyouts are mostly of cheaply declared idle blocks, so a cash limit barely affects SMEs under the licence. It hurts them badly under a market-priced lease. Vouchers and reserved blocks add little under the licence.</li>
       <li><strong>The billing period matters more than the charge rate.</strong> Weekly clearing beats monthly. Long migration windows erode the advantage.</li>
     </ul>
+    <h2>Reproduce the figures in the brief</h2>
+    <p>All figures use the default settings unless noted. Results are means across 20 seeds; small differences come from rounding.</p>
+    <ul>
+      <li><strong>Outcomes table and recommended design</strong> (90% in use, 1.6-week wait, 17% abandoned): defaults, "Recommended design" row.</li>
+      <li><strong>Access for smaller firms and who pays</strong> (41% vs 35% share of use; 29% vs 34% runs abandoned; 79% of charges paid by the higher-value half): defaults, goals table.</li>
+      <li><strong>Charge as a dial</strong> (about $195M a year and about 10% of value at 5% a month): set <em>Charge on declared value</em> to 5.0%/mo and read the recommended-design row.</li>
+      <li><strong>A 75 MW pilot</strong> (about $39M a year): set <em>Sandbox capacity</em> to 75 MW and <em>Eligible firms</em> to 45, keeping demand per firm the same.</li>
+      <li><strong>Slow migration</strong> (lower-value firms abandon 29% under the recommended design vs 34% under the committee): set <em>Migration downtime</em> to 14 d.</li>
+      <li><strong>Cash-constrained SMEs</strong> (SMEs abandon 17% under the licence vs 52% under a market-priced lease): set <em>SME cash limit</em> to 50%.</li>
+      <li><strong>Backfill</strong> (95% vs 82% in use): set <em>Scheduler backfill</em> to 50%.</li>
+    </ul>
     <h2>Limitations, read before citing</h2>
     <ul>
       <li><strong>Firms do not behave strategically.</strong> Declarations follow a fixed rule. The model does not capture overstatement to block rivals, collusion, or gaming of the buyout process. In theory the charge rate disciplines exactly this, so it barely affects allocation here. Here it mainly sets revenue.</li>
@@ -192,7 +203,7 @@
 </main>
 <footer class="sub" style="max-width:1180px;margin:24px auto 32px;padding:0 16px;font-size:.85rem">Built by <a href="https://www.linkedin.com/in/erik-peterson-9776671/">Erik Peterson</a>, Toronto, in a personal capacity. Open source: <a href="https://github.com/erik-pcpvr/sovereign-compute-model">model code and tests</a>. Prepared for a brief to the House of Commons Standing Committees on Science and Research and on Industry and Technology.</footer>
 
-<script src="model.js?v=2026-11-08b"></script>
+<script src="model.js?v=2026-11-08c"></script>
 <script>
 (function () {
   const M = window.ComputeModel;
@@ -211,7 +222,7 @@
   // ---------- controls ----------
   const pct = (x) => (x * 100).toFixed(1) + '%';
   const CONTROLS = [
-    ['demand', 'capacityMw', 'Sandbox capacity', 20, 300, 10, (v) => v + ' MW'],
+    ['demand', 'capacityMw', 'Sandbox capacity', 20, 300, 5, (v) => v + ' MW'],
     ['demand', 'firms', 'Eligible firms', 10, 200, 5, (v) => v],
     ['demand', 'load', 'Demand ÷ capacity', 0.3, 2, 0.1, (v) => v.toFixed(1) + '×', 'Average MW firms want to run, relative to capacity.'],
     ['demand', 'valueSigma', 'Spread of firm values', 0.1, 1.5, 0.1, (v) => v.toFixed(1), 'How much more some firms gain per MW than others.'],
@@ -219,7 +230,7 @@
     ['demand', 'maxWaitWeeks', 'Firms give up after', 2, 26, 1, (v) => v + ' wk'],
     ['demand', 'migrationDays', 'Migration downtime', 0, 14, 1, (v) => v + ' d', 'Lost when a block changes hands.'],
     ['demand', 'delayCost', 'Delay cost factor', 0.1, 1, 0.05, (v) => v.toFixed(2), 'Share of a week’s value lost per week a run is delayed.'],
-    ['licence', 'taxRatePerMonth', 'Charge on declared value', 0.005, 0.1, 0.005, (v) => pct(v) + '/mo'],
+    ['licence', 'taxRatePerMonth', 'Charge on declared value', 0.0025, 0.1, 0.0025, (v) => (v * 100).toFixed(2) + '%/mo'],
     ['licence', 'billingWeeks', 'Billing / buyout period', 1, 8, 1, (v) => v + ' wk'],
     ['committee', 'committeeCycleMonths', 'Review cycle', 1, 12, 1, (v) => v + ' mo'],
     ['committee', 'committeeReclaimWeeks', 'Reclaim idle grants after', 0, 26, 1, (v) => (v ? v + ' wk' : 'never')],
@@ -266,6 +277,7 @@
     ['Paid by users, % of value used', 'costPctValue', (x) => x.toFixed(1) + '%'],
     ['SMEs’ runs abandoned', 'smeAbandon', (x) => x.toFixed(0) + '%'],
     ['Voucher cost to Fund', 'voucherM', (x) => '$' + x.toFixed(0) + 'M'],
+    ['Charges paid by higher-value half', 'highValueChargeShare', (x) => x.toFixed(0) + '%'],
   ];
   const COLS = [
     ['Utilization', 'utilization', (x) => x.toFixed(0) + '%'],
@@ -315,7 +327,7 @@
   const q = (s) => '"' + String(s).replace(/"/g, '""') + '"';
   $('csvScenarios').addEventListener('click', () => {
     if (!last) return;
-    const keys = ['utilization', 'idleHeld', 'unallocated', 'valueM', 'revenueM', 'meanWait', 'medianWait', 'abandonRate', 'firmsServed', 'transfersPerMonth', 'lowValueShare', 'lowValueAbandon', 'top10Share', 'costPctValue', 'smeShare', 'smeAbandon', 'voucherM'];
+    const keys = ['utilization', 'idleHeld', 'unallocated', 'valueM', 'revenueM', 'meanWait', 'medianWait', 'abandonRate', 'firmsServed', 'transfersPerMonth', 'lowValueShare', 'lowValueAbandon', 'top10Share', 'costPctValue', 'smeShare', 'smeAbandon', 'voucherM', 'highValueChargeShare'];
     let csv = 'Scenario,' + keys.flatMap((k) => [k + '_mean', k + '_p10', k + '_p90']).join(',') + '\n';
     for (const s of last.scenarios) csv += q(s.label) + ',' + keys.flatMap((k) => [s.result[k].mean, s.result[k].p10, s.result[k].p90].map((x) => x.toFixed(2))).join(',') + '\n';
     csv += '\nParameters\n' + Object.entries(last.params).map(([k, v]) => k + ',' + v).join('\n') + '\n';

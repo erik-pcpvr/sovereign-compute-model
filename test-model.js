@@ -102,7 +102,7 @@ check("quadratic match: one big donor gets no CLR match; many small donors do", 
 if (process.argv.includes("--report") || failures === 0) {
   const P = base.params;
   console.log(`\nBase case: ${P.capacityMw} MW, ${P.firms} firms, load ${P.load}, ` +
-    `charge ${fmt(P.taxRatePerMonth * 100, 1)}%/mo, committee cycle ${P.committeeCycleMonths} mo, ` +
+    `charge ${fmt(P.taxRatePerMonth * 100, 2)}%/mo, committee cycle ${P.committeeCycleMonths} mo, ` +
     `lease ${P.leaseTermMonths} mo @ ${fmt(P.leasePriceFraction * 100, 0)}% of value, migration ${P.migrationDays} d, ${P.seeds} seeds`);
   const rows = [
     ["Util %", "utilization", 1], ["Idle-held %", "idleHeld", 1], ["Free %", "unallocated", 1],

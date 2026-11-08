@@ -17,7 +17,7 @@ Base case (demand 1.2× capacity):
 | Subsidized 6-month lease | 18% | 2.5 wk | 78% |
 | Market-priced 1-month lease | 67% | 4.6 wk | 30% |
 | Self-assessed licence, monthly | 75% | 1.9 wk | 30% |
-| Self-assessed licence, weekly | 83% | 0.3 wk | 19% |
+| Self-assessed licence, weekly | 83% | 0.3 wk | 18% |
 | **Self-assessed licence, recommended design** (weekly; running jobs protected up to 12 wk; 1.25%/mo) | **90%** | **1.6 wk** | **17%** |
 
 Against the program's stated goals (recommended design vs best-practice committee):

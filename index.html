@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sovereign Compute Allocation Model</title>
+<style>
+  :root {
+    --bg: #f7f7f5; --panel: #ffffff; --ink: #1c1c1a; --muted: #66665f; --line: #dddcd6;
+    --accent: #b3261e; --used: #2f5d50; --idle: #c9a227; --free: #c8c8c2; --good: #2f5d50;
+    --chip: #f0efea;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #161614; --panel: #1f1f1c; --ink: #ecebe6; --muted: #a3a29a; --line: #34332f;
+      --accent: #ef6b5f; --used: #6fb39c; --idle: #d9b444; --free: #4a4a45; --good: #6fb39c; --chip: #2a2a26;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-size: 15px; line-height: 1.5; }
+  header, main { max-width: 1180px; margin: 0 auto; padding: 0 16px; }
+  header { padding-top: 28px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 1.05rem; margin: 0 0 10px; }
+  h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 18px 0 8px; }
+  p { margin: 0 0 10px; }
+  a { color: var(--accent); }
+  .sub { color: var(--muted); max-width: 70ch; }
+  .note { border-left: 3px solid var(--accent); padding: 6px 12px; background: var(--panel); margin: 12px 0 0; font-size: 0.9rem; }
+  nav { display: flex; gap: 4px; margin: 20px 0 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  nav button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 10px 12px; font: inherit; color: var(--muted); cursor: pointer; }
+  nav button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  section[role="tabpanel"] { padding: 20px 0 48px; }
+  section[hidden] { display: none; }
+  .grid { display: grid; grid-template-columns: 300px 1fr; gap: 20px; align-items: start; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+  label.ctl { display: block; margin: 0 0 12px; font-size: 0.88rem; }
+  label.ctl span.row { display: flex; justify-content: space-between; gap: 8px; }
+  label.ctl output { font-variant-numeric: tabular-nums; font-weight: 600; }
+  label.ctl small { display: block; color: var(--muted); font-size: 0.78rem; }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  button.b { font: inherit; font-size: 0.85rem; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--chip); color: var(--ink); cursor: pointer; }
+  button.b:hover { border-color: var(--muted); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+  th, td { padding: 7px 8px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 600; color: var(--muted); font-size: 0.78rem; }
+  td small { display: block; color: var(--muted); font-size: 0.72rem; }
+  tr.lic td:first-child { font-weight: 600; }
+  .bars { margin-top: 18px; }
+  .bar { display: grid; grid-template-columns: minmax(120px, 260px) 1fr; gap: 10px; align-items: center; margin: 6px 0; font-size: 0.82rem; }
+  .stack { display: flex; height: 18px; border-radius: 4px; overflow: hidden; background: var(--free); }
+  .stack i { display: block; height: 100%; }
+  .legend { display: flex; gap: 14px; font-size: 0.8rem; color: var(--muted); margin-top: 6px; flex-wrap: wrap; }
+  .legend b { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .status { font-size: 0.8rem; color: var(--muted); min-height: 1.2em; }
+  .proj { border-top: 1px solid var(--line); padding: 12px 0; }
+  .proj .top { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; align-items: baseline; }
+  .proj input[type=number] { width: 7.5em; font: inherit; padding: 2px 6px; background: var(--bg); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
+  .mbar { height: 10px; border-radius: 3px; background: var(--good); }
+  .mbar.lin { background: var(--free); height: 6px; }
+  .mrow { display: grid; grid-template-columns: 150px 1fr 90px; gap: 8px; align-items: center; font-size: 0.8rem; margin-top: 4px; }
+  .prose { max-width: 75ch; }
+  .prose li { margin-bottom: 6px; }
+  code { font-size: 0.85em; background: var(--chip); padding: 1px 4px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Sovereign Compute Allocation Model</h1>
+  <p class="sub">An open, agent-based model comparing ways to allocate scarce public AI compute to Canadian firms: periodic committee review, fixed-term leases, and self-assessed (Harberger) licences. It also includes a quadratic-matching calculator for SME co-funding.</p>
+  <p class="note"><strong>Illustrative model, not a forecast.</strong> Results depend on the assumptions in the panel and on the <a href="#" data-goto="3">Assumptions &amp; limitations</a> tab. Use it to see <em>which conditions</em> favour each rule, not to predict outcomes.</p>
+  <nav role="tablist">
+    <button role="tab" aria-selected="true" data-tab="1">1 · Compute allocation</button>
+    <button role="tab" aria-selected="false" data-tab="2">2 · Quadratic matching</button>
+    <button role="tab" aria-selected="false" data-tab="3">3 · Assumptions &amp; limitations</button>
+  </nav>
+</header>
+
+<main>
+<section role="tabpanel" id="tab1">
+  <div class="grid">
+    <form class="panel" id="controls" onsubmit="return false">
+      <h3 style="margin-top:0">Pool &amp; demand</h3>
+      <div id="ctl-demand"></div>
+      <h3>Self-assessed licence</h3>
+      <div id="ctl-licence"></div>
+      <h3>Committee</h3>
+      <div id="ctl-committee"></div>
+      <h3>Lease</h3>
+      <div id="ctl-lease"></div>
+      <h3>Run</h3>
+      <div id="ctl-run"></div>
+      <div class="btns"><button class="b" type="button" id="reset">Reset defaults</button></div>
+    </form>
+
+    <div>
+      <div class="panel">
+        <h2>Outcomes over one year <span class="status" id="status"></span></h2>
+        <p class="sub" style="font-size:.85rem">Each row runs the same demand stream under a different allocation rule. The six rows use the parameters on the left; the second committee row and the market-priced lease override a few of them as labelled. Figures are means across seeds, with the 10th–90th percentile range underneath.</p>
+        <div class="tablewrap"><table id="results"></table></div>
+        <div class="bars" id="bars"></div>
+        <div class="legend"><span><b style="background:var(--used)"></b>Used</span><span><b style="background:var(--idle)"></b>Allocated but idle</span><span><b style="background:var(--free)"></b>Unallocated</span></div>
+        <div class="btns" style="margin-top:14px">
+          <button class="b" type="button" id="csvScenarios">Download results CSV</button>
+          <button class="b" type="button" id="csvMonthly">Download monthly utilization CSV</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section role="tabpanel" id="tab2" hidden>
+  <div class="grid">
+    <form class="panel" onsubmit="return false">
+      <label class="ctl"><span class="row">Matching pool <output id="qfPoolOut"></output></span>
+        <input type="range" id="qfPool" min="0.5" max="25" step="0.5" value="2.5"></label>
+      <label class="ctl"><span class="row">Quadratic weight α <output id="qfAlphaOut"></output></span>
+        <input type="range" id="qfAlpha" min="0" max="1" step="0.05" value="1">
+        <small>1 = full quadratic funding (Buterin, Hitzig &amp; Weyl 2019); 0 = plain 1:1 dollar matching.</small></label>
+      <p class="sub" style="font-size:.85rem">Each project's quadratic weight is (Σ√cᵢ)² − Σcᵢ: the square of the sum of the square roots of contributions, minus the contributions themselves. Matches are scaled to fit the pool. A project with one sponsor gets no quadratic match, however large the cheque.</p>
+    </form>
+    <div class="panel">
+      <h2>Projects</h2>
+      <p class="sub" style="font-size:.85rem">Edit contributor counts and average contributions. Bars compare the quadratic match (dark) with a 1:1 dollar match (light).</p>
+      <div id="qfProjects"></div>
+    </div>
+  </div>
+</section>
+
+<section role="tabpanel" id="tab3" hidden>
+  <div class="panel prose">
+    <h2>How the model works</h2>
+    <ul>
+      <li><strong>Capacity</strong> is split into 1 MW blocks held exclusively by one firm at a time, as with dedicated or isolated tenancy for commercial users.</li>
+      <li><strong>Firms</strong> alternate between idle spells and <em>runs</em> (training jobs) of random size and length. A run needs all its blocks at once. Each firm has a value per MW-week drawn from a lognormal distribution, and each run varies around it. Total demand is calibrated to the chosen load (demanded MW ÷ capacity).</li>
+      <li>A run that waits longer than the <em>give-up</em> threshold is abandoned. The firm goes abroad or drops the project.</li>
+      <li><strong>Holding an idle block has value</strong>: if the next run arrives, the firm avoids waiting for capacity. This option value is the chance of a run next month × the value lost by waiting as long as firms currently wait × the delay-cost factor. It rises when capacity is hard to get, so hoarding reinforces itself.</li>
+      <li><strong>Committee:</strong> at each review round, firms with a run, and some recent users "just in case", request their need × a buffer. Reviewers rank requests by value with scoring error and discount speculative requests. Grants last until the next round. Between rounds, unallocated blocks go first-come-first-served, and allocations idle for longer than the reclaim period are taken back.</li>
+      <li><strong>Lease:</strong> firms sign fixed-term leases first-come-first-served, but only if their run plus the value of holding the capacity for the rest of the term covers the price. At expiry they renew if holding is still worth the price.</li>
+      <li><strong>Self-assessed licence:</strong> at each billing boundary, every holder declares a per-block price equal to the value of finishing its current run plus its option value. The declaration is shaded down by the charge rate relative to market turnover. The holder pays the charge on that declaration. Waiting firms, highest value first, buy the cheapest blocks they need if finishing their run is worth more than the price plus migration downtime. Sellers whose runs are interrupted keep their progress and can buy back in.</li>
+      <li><strong>Migration</strong> downtime is charged whenever a block changes hands, under every rule.</li>
+      <li>Results are averaged over many random seeds. All rules face the same demand stream (common random numbers).</li>
+    </ul>
+    <h2>What it suggests (default parameters)</h2>
+    <ul>
+      <li>The biggest losses come from <strong>idle capacity that costs nothing to hold</strong>: long grants and cheap, long leases. Any rule that makes holding idle capacity costly recovers much of it, including short, market-priced leases and a well-run committee with a short cycle and use-it-or-lose-it reclaim.</li>
+      <li>Self-assessed licences do best on <strong>waiting time, abandoned runs and value delivered</strong>, because capacity moves to whichever firm values it most at each billing boundary, with no review round.</li>
+      <li><strong>The billing period matters more than the charge rate.</strong> Weekly clearing beats monthly. Long migration windows erode the advantage.</li>
+    </ul>
+    <h2>Limitations, read before citing</h2>
+    <ul>
+      <li><strong>Firms do not behave strategically.</strong> Declarations follow a fixed rule. The model does not capture overstatement to block rivals, collusion, or gaming of the buyout process. In theory the charge rate disciplines exactly this, so it barely affects allocation here. Here it mainly sets revenue.</li>
+      <li><strong>No shared scheduler or backfill.</strong> Real shared HPC systems let other jobs use idle allocations, which would narrow the gap between rules. The model represents dedicated blocks.</li>
+      <li><strong>The status-quo rules are stylised.</strong> ISED has not published an allocation mechanism for industry access to SCIP. The committee and lease rules are plausible alternatives, not descriptions of a real program.</li>
+      <li><strong>Values are assumptions.</strong> "Value delivered" uses an assumed average value per MW-month of facility power (default C$1.7M, roughly the 2026 one-year rental price of ~570 H100-class GPUs). Changing it scales value and revenue but not utilization or waits. Revenue figures are not comparable across rules: lease revenue is a usage fee, licence revenue is a charge on top of any usage fee.</li>
+      <li>There are no prices for electricity or operations, no demand growth, no firm entry or exit, and no learning. One sandbox pool is modelled in isolation.</li>
+    </ul>
+    <p>Source code: <a href="https://github.com/erik-pcpvr/sovereign-compute-model">github.com/erik-pcpvr/sovereign-compute-model</a>. <code>model.js</code> is the model; <code>node test-model.js</code> runs the checks and prints the base-case report.</p>
+  </div>
+</section>
+</main>
+<footer class="sub" style="max-width:1180px;margin:24px auto 32px;padding:0 16px;font-size:.85rem">Built by <a href="https://www.linkedin.com/in/erik-peterson-9776671/">Erik Peterson</a>, Toronto, in a personal capacity. Open source: <a href="https://github.com/erik-pcpvr/sovereign-compute-model">model code and tests</a>. Prepared for a brief to the House of Commons Standing Committees on Science and Research and on Industry and Technology.</footer>
+
+<script src="model.js"></script>
+<script>
+(function () {
+  const M = window.ComputeModel;
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- tabs ----------
+  function showTab(n) {
+    document.querySelectorAll('[role=tab]').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === String(n)));
+    for (let i = 1; i <= 3; i++) $('tab' + i).hidden = i !== n;
+    try { localStorage.setItem('scam-tab', n); } catch (e) {}
+  }
+  document.querySelectorAll('[role=tab]').forEach((b) => b.addEventListener('click', () => showTab(+b.dataset.tab)));
+  document.querySelectorAll('[data-goto]').forEach((a) => a.addEventListener('click', (e) => { e.preventDefault(); showTab(+a.dataset.goto); }));
+  try { const t = +localStorage.getItem('scam-tab'); if (t >= 1 && t <= 3) showTab(t); } catch (e) {}
+
+  // ---------- controls ----------
+  const pct = (x) => (x * 100).toFixed(1) + '%';
+  const CONTROLS = [
+    ['demand', 'capacityMw', 'Sandbox capacity', 20, 300, 10, (v) => v + ' MW'],
+    ['demand', 'firms', 'Eligible firms', 10, 200, 5, (v) => v],
+    ['demand', 'load', 'Demand ÷ capacity', 0.3, 2, 0.1, (v) => v.toFixed(1) + '×', 'Average MW firms want to run, relative to capacity.'],
+    ['demand', 'valueSigma', 'Spread of firm values', 0.1, 1.5, 0.1, (v) => v.toFixed(1), 'How much more some firms gain per MW than others.'],
+    ['demand', 'valuePerMwMonth', 'Value of 1 MW-month', 0.8, 3, 0.1, (v) => 'C$' + v.toFixed(1) + 'M', 'To the average user, per MW of facility power (≈570 H100 or ≈400 B200). 2026 rental ≈ C$1.4M (1-yr H100 contract) to C$2.5M (on-demand).'],
+    ['demand', 'maxWaitWeeks', 'Firms give up after', 2, 26, 1, (v) => v + ' wk'],
+    ['demand', 'migrationDays', 'Migration downtime', 0, 14, 1, (v) => v + ' d', 'Lost when a block changes hands.'],
+    ['demand', 'delayCost', 'Delay cost factor', 0.1, 1, 0.05, (v) => v.toFixed(2), 'Share of a week’s value lost per week a run is delayed.'],
+    ['licence', 'taxRatePerMonth', 'Charge on declared value', 0.005, 0.1, 0.005, (v) => pct(v) + '/mo'],
+    ['licence', 'billingWeeks', 'Billing / buyout period', 1, 8, 1, (v) => v + ' wk'],
+    ['committee', 'committeeCycleMonths', 'Review cycle', 1, 12, 1, (v) => v + ' mo'],
+    ['committee', 'committeeReclaimWeeks', 'Reclaim idle grants after', 0, 26, 1, (v) => (v ? v + ' wk' : 'never')],
+    ['committee', 'committeeBuffer', 'Request buffer', 1, 2, 0.05, (v) => v.toFixed(2) + '×'],
+    ['committee', 'committeeNoise', 'Review scoring error', 0, 1.5, 0.1, (v) => v.toFixed(1)],
+    ['lease', 'leaseTermMonths', 'Lease term', 1, 24, 1, (v) => v + ' mo'],
+    ['lease', 'leasePriceFraction', 'Lease price', 0.05, 1.2, 0.05, (v) => Math.round(v * 100) + '% of value'],
+    ['run', 'seeds', 'Random seeds', 4, 60, 2, (v) => v],
+  ];
+  const D = M.DEFAULTS;
+  for (const [grp, key, label, min, max, step, fmt, hint] of CONTROLS) {
+    const l = document.createElement('label');
+    l.className = 'ctl';
+    l.innerHTML = `<span class="row">${label} <output></output></span><input type="range" min="${min}" max="${max}" step="${step}" data-key="${key}">` + (hint ? `<small>${hint}</small>` : '');
+    const inp = l.querySelector('input'), out = l.querySelector('output');
+    inp.value = D[key];
+    const upd = () => { out.textContent = fmt(+inp.value); };
+    inp.addEventListener('input', () => { upd(); schedule(); });
+    upd();
+    $('ctl-' + grp).appendChild(l);
+  }
+  const params = () => {
+    const p = {};
+    document.querySelectorAll('#controls input[data-key]').forEach((i) => { p[i.dataset.key] = +i.value; });
+    return p;
+  };
+  $('reset').addEventListener('click', () => {
+    document.querySelectorAll('#controls input[data-key]').forEach((i) => { i.value = D[i.dataset.key]; i.dispatchEvent(new Event('input')); });
+  });
+
+  // ---------- run & render ----------
+  let timer = null, last = null;
+  function schedule() { $('status').textContent = '· updating…'; clearTimeout(timer); timer = setTimeout(compute, 150); }
+
+  const COLS = [
+    ['Utilization', 'utilization', (x) => x.toFixed(0) + '%'],
+    ['Idle-held', 'idleHeld', (x) => x.toFixed(0) + '%'],
+    ['Value delivered', 'valueM', (x) => '$' + x.toFixed(0) + 'M'],
+    ['Mean wait', 'meanWait', (x) => x.toFixed(1) + ' wk'],
+    ['Runs abandoned', 'abandonRate', (x) => x.toFixed(0) + '%'],
+    ['Firms served', 'firmsServed', (x) => x.toFixed(0)],
+    ['Crown revenue', 'revenueM', (x) => '$' + x.toFixed(1) + 'M'],
+  ];
+
+  function compute() {
+    const t0 = performance.now();
+    const sc = M.runScenarios(params());
+    last = { params: Object.assign({}, D, params()), scenarios: sc };
+    render(sc);
+    $('status').textContent = `· ${last.params.seeds} seeds, ${Math.round(performance.now() - t0)} ms`;
+  }
+
+  function render(sc) {
+    let h = '<thead><tr><th>Rule</th>' + COLS.map((c) => `<th>${c[0]}</th>`).join('') + '</tr></thead><tbody>';
+    for (const s of sc) {
+      h += `<tr class="${s.rule === 'harberger' ? 'lic' : ''}"><td>${s.label}</td>` + COLS.map(([, k, f]) => {
+        const r = s.result[k];
+        return `<td>${f(r.mean)}<small>${f(r.p10)}–${f(r.p90)}</small></td>`;
+      }).join('') + '</tr>';
+    }
+    $('results').innerHTML = h + '</tbody>';
+
+    $('bars').innerHTML = sc.map((s) => {
+      const u = s.result.utilization.mean, i = s.result.idleHeld.mean;
+      return `<div class="bar"><span>${s.label}</span><div class="stack" role="img" aria-label="${u.toFixed(0)}% used, ${i.toFixed(0)}% idle-held">` +
+        `<i style="width:${u}%;background:var(--used)"></i><i style="width:${i}%;background:var(--idle)"></i></div></div>`;
+    }).join('');
+  }
+
+  function download(name, text) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  const q = (s) => '"' + String(s).replace(/"/g, '""') + '"';
+  $('csvScenarios').addEventListener('click', () => {
+    if (!last) return;
+    const keys = ['utilization', 'idleHeld', 'unallocated', 'valueM', 'revenueM', 'meanWait', 'medianWait', 'abandonRate', 'firmsServed', 'transfersPerMonth'];
+    let csv = 'Scenario,' + keys.flatMap((k) => [k + '_mean', k + '_p10', k + '_p90']).join(',') + '\n';
+    for (const s of last.scenarios) csv += q(s.label) + ',' + keys.flatMap((k) => [s.result[k].mean, s.result[k].p10, s.result[k].p90].map((x) => x.toFixed(2))).join(',') + '\n';
+    csv += '\nParameters\n' + Object.entries(last.params).map(([k, v]) => k + ',' + v).join('\n') + '\n';
+    download('compute_allocation_results.csv', csv);
+  });
+  $('csvMonthly').addEventListener('click', () => {
+    if (!last) return;
+    const n = last.scenarios[0].result.monthly.length;
+    let csv = 'Month,' + last.scenarios.map((s) => q(s.label + ' utilization (%)')).join(',') + '\n';
+    for (let j = 0; j < n; j++) csv += (j + 1) + ',' + last.scenarios.map((s) => s.result.monthly[j].toFixed(1)).join(',') + '\n';
+    download('compute_utilization_monthly.csv', csv);
+  });
+
+  // ---------- quadratic matching ----------
+  const projects = [
+    { name: 'Shared defect-detection model for manufacturers', n: 320, avg: 2500 },
+    { name: 'Bilingual clinical triage model for rural clinics', n: 185, avg: 2000 },
+    { name: 'Open Canadian legal and regulatory corpus', n: 410, avg: 1000 },
+    { name: 'Single-sponsor internal tool', n: 1, avg: 1200000 },
+  ];
+  const money = (x) => x >= 1e6 ? '$' + (x / 1e6).toFixed(2) + 'M' : '$' + Math.round(x).toLocaleString();
+  function renderQF() {
+    const pool = +$('qfPool').value * 1e6, alpha = +$('qfAlpha').value;
+    $('qfPoolOut').textContent = '$' + (+$('qfPool').value) + 'M';
+    $('qfAlphaOut').textContent = alpha.toFixed(2);
+    const res = M.quadraticMatch(projects.map((p) => ({ contributions: Array(Math.max(0, p.n)).fill(Math.max(0, p.avg)) })), pool, alpha);
+    const max = Math.max(1, ...res.map((r) => Math.max(r.match, r.linearMatch)));
+    $('qfProjects').innerHTML = projects.map((p, i) => `
+      <div class="proj">
+        <div class="top"><strong>${p.name}</strong>
+          <span style="font-size:.82rem"><input type="number" min="0" value="${p.n}" data-i="${i}" data-f="n" aria-label="contributors"> contributors ×
+          $<input type="number" min="0" value="${p.avg}" data-i="${i}" data-f="avg" aria-label="average contribution"> = ${money(res[i].private)}</span></div>
+        <div class="mrow"><span>Quadratic match</span><div class="mbar" style="width:${(100 * res[i].match) / max}%"></div><span>${money(res[i].match)}</span></div>
+        <div class="mrow"><span>1:1 dollar match</span><div class="mbar lin" style="width:${(100 * res[i].linearMatch) / max}%"></div><span>${money(res[i].linearMatch)}</span></div>
+      </div>`).join('');
+    $('qfProjects').querySelectorAll('input').forEach((inp) => inp.addEventListener('change', () => {
+      projects[+inp.dataset.i][inp.dataset.f] = Math.max(0, +inp.value || 0); renderQF();
+    }));
+  }
+  $('qfPool').addEventListener('input', renderQF);
+  $('qfAlpha').addEventListener('input', renderQF);
+
+  renderQF();
+  compute();
+})();
+</script>
+</body>
+</html>

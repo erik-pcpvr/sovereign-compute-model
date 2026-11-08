@@ -60,6 +60,14 @@ check("harberger revenue scales with the charge rate", () => {
   assert.ok(b > a, `${a} -> ${b}`);
 });
 
+check("goal metrics are shares within [0,100] and committee charges nothing", () => {
+  for (const r of M.RULES) for (const k of ["lowValueShare", "lowValueAbandon", "top10Share"]) {
+    assert.ok(R[r][k].mean >= 0 && R[r][k].mean <= 100, `${r} ${k} ${R[r][k].mean}`);
+  }
+  assert.strictEqual(R.committee.costPctValue.mean, 0);
+  assert.ok(R.harberger.lowValueShare.mean < 50, "lower-value half should use less than half");
+});
+
 check("quadratic match: one big donor gets no CLR match; many small donors do", () => {
   const out = M.quadraticMatch([
     { contributions: [1_000_000] },
@@ -78,6 +86,7 @@ if (process.argv.includes("--report") || failures === 0) {
     ["Util %", "utilization", 1], ["Idle-held %", "idleHeld", 1], ["Free %", "unallocated", 1],
     ["Value $M/yr", "valueM", 0], ["Crown $M/yr", "revenueM", 1], ["Wait wk", "meanWait", 1],
     ["Abandon %", "abandonRate", 1], ["Firms", "firmsServed", 0],
+    ["LowV use %", "lowValueShare", 0], ["LowV aband %", "lowValueAbandon", 0], ["Top10 %", "top10Share", 0], ["Paid % val", "costPctValue", 1],
   ];
   const pad = (x, n) => String(x).padEnd(n);
   console.log(pad("Scenario", 64) + rows.map((r) => pad(r[0], 13)).join(""));

@@ -19,6 +19,8 @@ Base case (demand 1.2× capacity):
 | Self-assessed licence, monthly | 75% | 1.9 wk | 30% |
 | Self-assessed licence, weekly | 83% | 0.3 wk | 19% |
 
+Against the program's stated goals of access and affordability (weekly licence vs best-practice committee): the half of firms that gain least per MW get 39% vs 35% of the capacity used and abandon 30% vs 34% of their runs; the top 10% of firms use 24% vs 27%; licence charges cost users about 2.4% of the value of the compute they use. With a two-week migration window, lower-value firms fare worse under the licence (43% vs 34% abandoned), and the model has no cash constraints, so a pilot should include an SME safeguard.
+
 These are model outputs, not forecasts.
 
 ## Files

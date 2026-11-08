@@ -129,6 +129,7 @@
       served: new Set(), monthly: [], _mUsed: 0, _mWeeks: 0,
     };
 
+    const fUsed = new Float64Array(N), fStarted = new Int32Array(N), fAband = new Int32Array(N);
     const counts = new Int32Array(N);
     const recount = () => {
       counts.fill(0);
@@ -331,7 +332,7 @@
           b.started = w;
           const waited = w - b.created;
           recentWait = 0.9 * recentWait + 0.1 * waited;
-          if (measuring) { m.waits.push(waited); m.started++; m.served.add(i); }
+          if (measuring) { m.waits.push(waited); m.started++; m.served.add(i); fStarted[i]++; }
         }
         b.waitSince = -1;
         f.lastActive = w;
@@ -345,7 +346,7 @@
         }
         const eff = b.mw - lost;
         used += eff;
-        if (measuring) m.value += eff * valWk * b.v;
+        if (measuring) { m.value += eff * valWk * b.v; fUsed[i] += eff; }
         if (--b.left <= 0) f.burst = null;
       }
       // Waiting bursts give up after maxWaitWeeks.
@@ -355,7 +356,7 @@
           if (b.waitSince < 0) b.waitSince = w;
           if (w - b.waitSince >= P.maxWaitWeeks) {
             if (b.started < 0) recentWait = 0.9 * recentWait + 0.1 * P.maxWaitWeeks;
-            if (measuring) m.abandoned++;
+            if (measuring) { m.abandoned++; fAband[i]++; }
             firms[i].burst = null;
           }
         }
@@ -378,7 +379,20 @@
     const BW = C * P.weeks;
     const yr = 52 / P.weeks;
     const sorted = m.waits.slice().sort((a, b) => a - b);
+    // Program-goal metrics. Firms ranked by their typical value per MW: the
+    // lower half stands in for firms less able to pay (e.g. early-stage SMEs).
+    const byV = firms.map((f, i) => i).sort((a, b) => firms[a].v - firms[b].v);
+    const low = byV.slice(0, Math.floor(N / 2));
+    const sum = (ix, arr) => ix.reduce((s, i) => s + arr[i], 0);
+    const totUsed = sum(byV, fUsed) || 1;
+    const lowSt = sum(low, fStarted), lowAb = sum(low, fAband);
+    const byUse = byV.slice().sort((a, b) => fUsed[b] - fUsed[a]);
+    const usedMonths = m.usedBW / WEEKS_PER_MONTH;
     return {
+      lowValueShare: (100 * sum(low, fUsed)) / totUsed,
+      lowValueAbandon: lowSt + lowAb ? (100 * lowAb) / (lowSt + lowAb) : 0,
+      top10Share: (100 * sum(byUse.slice(0, Math.max(1, Math.round(N / 10))), fUsed)) / totUsed,
+      costPctValue: usedMonths ? (100 * m.revenue) / (usedMonths * P.valuePerMwMonth) : 0,
       utilization: (100 * m.usedBW) / BW,
       idleHeld: (100 * m.idleHeldBW) / BW,
       unallocated: (100 * m.freeBW) / BW,
@@ -394,7 +408,8 @@
   }
 
   const METRICS = ["utilization", "idleHeld", "unallocated", "valueM", "revenueM",
-    "meanWait", "medianWait", "abandonRate", "firmsServed", "transfersPerMonth"];
+    "meanWait", "medianWait", "abandonRate", "firmsServed", "transfersPerMonth",
+    "lowValueShare", "lowValueAbandon", "top10Share", "costPctValue"];
 
   function summarize(runs) {
     const out = {};
